@@ -1,0 +1,10 @@
+@relation x2_obs
+
+@attribute x1 numeric
+@attribute x2 {yes,no}
+@attribute class {c1,c2}
+
+@data
+1,yes,c1
+2,yes,c2
+3,no,c2

@@ -1,0 +1,8 @@
+@relation x1_test
+
+@attribute x1 numeric
+@attribute x2 {yes,no}
+@attribute class {c1,c2}
+
+@data
+?,yes,c2
