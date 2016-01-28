@@ -21,7 +21,7 @@ import weka.core.Capabilities.Capability;
 import weka.filters.Filter;
 import weka.filters.SupervisedFilter;
 
-public class IRMI extends Filter implements SupervisedFilter {
+public class FIMI extends Filter implements SupervisedFilter {
 	
 	/**
 	 * Class to make it possible to sort by index (by grabbing indices inside the Pair objects)
@@ -55,6 +55,16 @@ public class IRMI extends Filter implements SupervisedFilter {
 	private double m_epsilon = 5;
 	
 	private boolean m_imputeTestData = true;
+	
+	private boolean m_dontUseClassAttribute = false;
+	
+	public void setDontUseClassAttribute(boolean b) {
+		m_dontUseClassAttribute = b;
+	}
+	
+	public boolean getDontUseClassAttribute() {
+		return m_dontUseClassAttribute;
+	}
 	
 	public void setImputeTestData(boolean b) {
 		m_imputeTestData = b;
@@ -150,7 +160,7 @@ public class IRMI extends Filter implements SupervisedFilter {
 	}
 	
 	public static void main(String[] args) {
-		 runFilter(new IRMI(), args);
+		 runFilter(new FIMI(), args);
 	}
 	
   /**
@@ -188,7 +198,6 @@ public class IRMI extends Filter implements SupervisedFilter {
 	
 	public void convertInstance(Instance inst) throws Exception {
 		// push(inst); // do nothing
-		
 		if( getImputeTestData() ) {
 			Instances instances = inst.dataset();
 			int originalClassIndex = instances.classIndex();
@@ -340,6 +349,13 @@ public class IRMI extends Filter implements SupervisedFilter {
 			Instances df = getInputFormat();			
 			int originalClassIndex = df.classIndex();
 			
+			double[] classVals = df.attributeToDoubleArray(originalClassIndex);
+			if( getDontUseClassAttribute() ) {
+				for(int i = 0; i < df.numInstances(); i++) {
+					df.get(i).setClassValue(Double.NaN);
+				}
+			}
+			
 			/*
 			 * Step 2: Sort the variables according to the original amount of
 			 * missing values. We now assume that the variables are already sorted,
@@ -378,8 +394,11 @@ public class IRMI extends Filter implements SupervisedFilter {
 			 * technique (e.g. k-nearest neighbour or mean imputation).
 			 */
 			for(int x = 0; x < df.numAttributes(); x++) {
-				double[] vals = df.attributeToDoubleArray(x);
 				
+				if( x == df.classIndex() )
+					continue;
+				
+				double[] vals = df.attributeToDoubleArray(x);
 				double colMean = 0;	
 				if(df.attribute(x).isNumeric()) {
 					colMean = median(vals);
@@ -403,8 +422,7 @@ public class IRMI extends Filter implements SupervisedFilter {
 			 * Step 4: Create a matrix with the variables corresponding to
 			 * the observed and missing cells of x_l. 
 			 */	
-			m_classifiers = new Classifier[ df.numAttributes() ];
-			
+			m_classifiers = new Classifier[ df.numAttributes() ];			
 			
 			/*
 			 * Step 3: Set l = 0 (i.e. l = 1)
@@ -430,6 +448,15 @@ public class IRMI extends Filter implements SupervisedFilter {
 						observed.add( df.get(x) );
 					observed.setClassIndex(l);
 					
+					// inefficient?
+					/*
+					if( getDontUseClassAttribute() ) {
+						Remove removeAttr = new Remove();
+						removeAttr.setAttributeIndicesArray(new int[] { originalClassIndex } );
+						observed = Filter.useFilter(observed, removeAttr);
+					}
+					*/
+					
 					Classifier cls = null;
 					if(df.attribute(l).isNominal())
 						cls = AbstractClassifier.makeCopy(m_nominalClassifier);
@@ -439,7 +466,7 @@ public class IRMI extends Filter implements SupervisedFilter {
 					/*
 					 * Step 5: Build the model. Then predict the missing class.
 					 */
-					System.out.println(observed);
+					//System.out.println(observed);
 					cls.buildClassifier(observed);
 					m_classifiers[l] = cls;
 					
@@ -488,6 +515,14 @@ public class IRMI extends Filter implements SupervisedFilter {
 				}
 				
 			}
+			
+			df.setClassIndex(originalClassIndex);
+			if( getDontUseClassAttribute() ) {
+				for(int i = 0; i < df.numInstances(); i++) {
+					df.get(i).setClassValue( classVals[i] );
+				}
+			}		
+			
 			for(Instance inst : df) {
 				convertInstance(inst);
 			}		
@@ -556,6 +591,8 @@ public class IRMI extends Filter implements SupervisedFilter {
 	    tmpOptions[0] = "";
 	    setNumericClassifier(AbstractClassifier.forName(tmpStr, tmpOptions));
 	    
+	    setDontUseClassAttribute(Utils.getFlag("dc", options));
+	    
 	    super.setOptions(options);
 
 	    Utils.checkForRemainingOptions(options);
@@ -590,6 +627,10 @@ public class IRMI extends Filter implements SupervisedFilter {
 	    	tmp += " " + Utils.joinOptions(((OptionHandler) cls).getOptions());
 	    }
 	    result.add(tmp);
+	    
+	    if( getDontUseClassAttribute() ) {
+	    	result.add("-dc");
+	    }
 		
 	    Collections.addAll(result, super.getOptions());
 	    return result.toArray(new String[result.size()]);
